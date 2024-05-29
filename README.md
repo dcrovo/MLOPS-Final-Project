@@ -30,6 +30,7 @@ La solución requiere que se tenga una cuenta creada en DockerHub que será usad
 1.    Vaya al repositorio de GitHub
 2.    Navegue a través de "Settings > Secrets and variables > Actions".
 3.    Agregue los siguientes secrets:
+
 	-    "DOCKERHUB_USERNAME": El nombre de usuario de DockerHub
 	-    "DOCKERHUB_PASSWORD": El password del usuario de DockerHub
 
