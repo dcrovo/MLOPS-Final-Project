@@ -10,7 +10,7 @@
 
 ## Arquitectura
 
-![alt text](https://github.com/c4ttivo/MLOPS-Project2/blob/main/img/architecture.png?raw=true)
+![alt text](https://github.com/dcrovo/MLOPS-Final-Project/blob/main/img/architecture.png?raw=true)
 
 ### Descripción de componentes
 
