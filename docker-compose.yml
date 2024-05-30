@@ -311,7 +311,7 @@ services:
     
   mlflow:
     container_name: Mlflow_server
-    image: c4ttiv0/mlflow:1.0.0
+    image: dcrovo/mlflow:1.0.0
     ports:
       - "8082:5000"
     environment:
@@ -326,7 +326,7 @@ services:
       
   inference:
     container_name: Inference
-    image: c4ttiv0/inference:1.0.0
+    image: dcrovo/inference:1.0.0
     ports:
       - "80:80"
     depends_on:
@@ -334,7 +334,7 @@ services:
 
   streamlit: 
     container_name: Streamlit_app
-    image: ca4ttiv0/streamlit:1.0.0
+    image: dcrovo/streamlit:1.0.0
     ports:
       - "8089:8501"
     depends_on:
