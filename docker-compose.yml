@@ -1,31 +1,18 @@
 version: '3.8'
 x-airflow-common:
   &airflow-common
-  # In order to add custom dependencies or upgrade provider packages you can use your extended image.
-  # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
-  # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
-  #image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.6.0}
-  build: .
+  image: ${DOCKERHUB_USERNAME}/airflow:1.0.0
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
-    # For backward compatibility, with Airflow <2.3
-    AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
-    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
     AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
     AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
-    # yamllint disable rule:line-length
-    # Use simple http server on scheduler for health checks
-    # See https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/logging-monitoring/check-health.html#scheduler-health-check-server
-    # yamllint enable rule:line-length
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
-    # WARNING: Use _PIP_ADDITIONAL_REQUIREMENTS option ONLY for a quick checks
-    # for other purpose (development, test and especially production usage) build/extend Airflow image.
-    #_PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:- mlflow==2.10.2 pandas sqlalchemy pymysql scikit-learn  matplotlib}
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
@@ -38,68 +25,74 @@ x-airflow-common:
     postgres:
       condition: service_healthy
 
-
 services:
   postgres:
     image: postgres:13
     environment:
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
-      POSTGRES_DB: airflow
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres-db-volume:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "airflow"]
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}"]
       interval: 10s
       retries: 5
       start_period: 5s
     restart: always
-    
-   
+    networks:
+      - backend
+
   mlflowdb:
     image: postgres:13
     environment:
-      POSTGRES_USER: mlflowuser
-      POSTGRES_PASSWORD: mlflowpass
-      POSTGRES_DB: mlflowruns
+      POSTGRES_USER: ${MLFLOWDB_USER}
+      POSTGRES_PASSWORD: ${MLFLOWDB_PASSWORD}
+      POSTGRES_DB: ${MLFLOWDB_NAME}
     volumes:
       - mlflow-db-volume:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-d", "mlflowruns","-U","mlflowuser"]
+      test: ["CMD", "pg_isready", "-d", "${MLFLOWDB_NAME}","-U","${MLFLOWDB_USER}"]
       interval: 10s
       retries: 5
       start_period: 5s
     restart: always
+    networks:
+      - backend
 
   rawdb:
     image: postgres:13
     environment:
-      POSTGRES_USER: rawusr
-      POSTGRES_PASSWORD: rawpass
-      POSTGRES_DB: rawdb
+      POSTGRES_USER: ${RAWDB_USER}
+      POSTGRES_PASSWORD: ${RAWDB_PASSWORD}
+      POSTGRES_DB: ${RAWDB_NAME}
     volumes:
       - raw-db-volume:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-d", "rawdb","-U","rawusr"]
-      interval: 10s
-      retries: 5
-      start_period: 5s
-    restart: always 
-    
-  cleandb:
-    image: postgres:13
-    environment:
-      POSTGRES_USER: cleanusr
-      POSTGRES_PASSWORD: cleanpass
-      POSTGRES_DB: cleandb
-    volumes:
-      - clean-db-volume:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD", "pg_isready", "-d", "cleandb","-U","cleanusr"]
+      test: ["CMD", "pg_isready", "-d", "${RAWDB_NAME}","-U","${RAWDB_USER}"]
       interval: 10s
       retries: 5
       start_period: 5s
     restart: always
+    networks:
+      - backend
+    
+  cleandb:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: ${CLEANDB_USER}
+      POSTGRES_PASSWORD: ${CLEANDB_PASSWORD}
+      POSTGRES_DB: ${CLEANDB_NAME}
+    volumes:
+      - clean-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-d", "${CLEANDB_NAME}","-U","${CLEANDB_USER}"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+    networks:
+      - backend
 
   redis:
     image: redis:latest
@@ -112,12 +105,14 @@ services:
       retries: 50
       start_period: 30s
     restart: always
+    networks:
+      - backend
 
   airflow-webserver:
     <<: *airflow-common
     command: webserver
     ports:
-      - "8080:8080"
+      - "${AIRFLOW_WEBSERVER_PORT}:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 30s
@@ -129,6 +124,9 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
+    networks:
+      - frontend
+      - backend
 
   airflow-scheduler:
     <<: *airflow-common
@@ -144,6 +142,8 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
+    networks:
+      - backend
 
   airflow-worker:
     <<: *airflow-common
@@ -158,14 +158,14 @@ services:
       start_period: 30s
     environment:
       <<: *airflow-common-env
-      # Required to handle warm shutdown of the celery workers properly
-      # See https://airflow.apache.org/docs/docker-stack/entrypoint.html#signal-propagation
       DUMB_INIT_SETSID: "0"
     restart: always
     depends_on:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
+    networks:
+      - backend
 
   airflow-triggerer:
     <<: *airflow-common
@@ -181,11 +181,12 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
+    networks:
+      - backend
 
   airflow-init:
     <<: *airflow-common
     entrypoint: /bin/bash
-    # yamllint disable rule:line-length
     command:
       - -c
       - |
@@ -248,7 +249,6 @@ services:
         mkdir -p /sources/logs /sources/dags /sources/plugins
         chown -R "${AIRFLOW_UID}:0" /sources/{logs,dags,plugins}
         exec /entrypoint airflow version
-    # yamllint enable rule:line-length
     environment:
       <<: *airflow-common-env
       _AIRFLOW_DB_UPGRADE: 'true'
@@ -259,6 +259,8 @@ services:
     user: "0:0"
     volumes:
       - ${AIRFLOW_PROJ_DIR:-.}:/sources
+    networks:
+      - backend
 
   airflow-cli:
     <<: *airflow-common
@@ -267,79 +269,85 @@ services:
     environment:
       <<: *airflow-common-env
       CONNECTION_CHECK_MAX_COUNT: "0"
-    # Workaround for entrypoint issue. See: https://github.com/apache/airflow/issues/16252
     command:
       - bash
       - -c
       - airflow
+    networks:
+      - backend
 
-  # You can enable flower by adding "--profile flower" option e.g. docker-compose --profile flower up
-  # or by explicitly targeted on the command line e.g. docker-compose up flower.
-  # See: https://docs.docker.com/compose/profiles/
   flower:
     <<: *airflow-common
     command: celery flower
     profiles:
       - flower
     ports:
-      - "5555:5555"
+      - "${FLOWER_PORT}:5555"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:5555/"]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 30s
-    restart: always
+      retries: 5git checkout ea3360cee1b4a5f1170152ba8c2c52eaa1f284e8 -- <path-to-folder>
     depends_on:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
+    networks:
+      - backend
         
   minio:
     container_name: Minio
     command: server /data --console-address ":9001"
     image: quay.io/minio/minio:latest
     ports:
-      - "8081:9000"
-      - "8083:9001"
+      - "${MINIO_PORT}:9000"
+      - "${MINIO_CONSOLE_PORT}:9001"
     environment:
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
     volumes:
       - ./minio-data:/data
     restart: unless-stopped
+    networks:
+      - frontend
     
   mlflow:
     container_name: Mlflow_server
-    image: dcrovo/mlflow:1.0.0
+    image: ${DOCKERHUB_USERNAME}/mlflow:1.0.0
     ports:
-      - "8082:5000"
+      - "${MLFLOW_PORT}:5000"
     environment:
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
       - MLFLOW_S3_IGNORE_TLS=true
-      - AWS_ACCESS_KEY_ID=minioadmin
-      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - AWS_ACCESS_KEY_ID=${MINIO_ACCESS_KEY}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_SECRET_KEY}
     depends_on:
       - minio
       - mlflowdb
-    command: mlflow server --backend-store-uri postgresql+psycopg2://mlflowuser:mlflowpass@mlflowdb/mlflowruns --default-artifact-root s3://mlflows3/artifacts --host 0.0.0.0 --serve-artifacts
+    command: mlflow server --backend-store-uri postgresql+psycopg2://${MLFLOWDB_USER}:${MLFLOWDB_PASSWORD}@mlflowdb/${MLFLOWDB_NAME} --default-artifact-root s3://${BUCKET_NAME}/artifacts --host 0.0.0.0 --serve-artifacts
+    networks:
+      - backend
       
   inference:
     container_name: Inference
-    image: dcrovo/inference:1.0.0
+    image: ${DOCKERHUB_USERNAME}/inference:1.0.0
     ports:
-      - "80:80"
+      - "${INFERENCE_PORT}:80"
     depends_on:
       - mlflow
+    networks:
+      - backend
 
   streamlit: 
     container_name: Streamlit_app
-    image: dcrovo/streamlit:1.0.0
+    image: ${DOCKERHUB_USERNAME}/streamlit:1.0.0
     ports:
-      - "8089:8501"
+      - "${STREAMLIT_PORT}:8501"
     depends_on:
-      - mlflow  
+      - mlflow
     restart: always
+    networks:
+      - frontend
 
 volumes:
   minio-data:
@@ -348,4 +356,6 @@ volumes:
   raw-db-volume:
   clean-db-volume:
 
-
+networks:
+  frontend:
+  backend:
