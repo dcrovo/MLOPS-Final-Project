@@ -19,6 +19,12 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
+      - name: Build Airflow Docker image
+        run: docker build ./airflow -t ${{ secrets.DOCKERHUB_USERNAME }}/airflow:1.0.0
+
+      - name: Push Airflow Docker image to DockerHub
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/airflow:1.0.0
+
       - name: Build Mlflow Docker image
         run: docker build ./mlflow -t ${{ secrets.DOCKERHUB_USERNAME }}/mlflow:1.0.0
 
