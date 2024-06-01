@@ -3,17 +3,18 @@ from airflow.models import Variable
 from airflow.operators.python_operator import PythonOperator, ShortCircuitOperator,BranchOperator
 from airflow.operators.dummy_operator import DummyOperator
 from datetime import datetime, timedelta
-import requests
 import os
 from scripts.train import train_random_forest, train_gbm
+from scropst.utils import get_data_from_api
 
 
 # Definiciones globales
+API_URL = "http://10.43.101.149:80"
 GROUP_NUMBER = 6
-API_URL = f"http://10.43.101.149:80/data?group_number={GROUP_NUMBER}"
+
 DATABASE_URI = 'mysql+pymysql://modeldbuser:modeldbpass@modeldb:3306/modeldb'
 
-    
+
 def fetch_and_store_data(**kwargs):
     '''
     Fetch data from the API and store it directly into the database.
@@ -25,39 +26,29 @@ def fetch_and_store_data(**kwargs):
     import pandas as pd
     from sqlalchemy import create_engine
 
-    success_calls = int(Variable.get("success_calls", default_var=0))
-
-    response = requests.get(API_URL)
-
-    if response.status_code == 200:
-        data = response.json()['data']
-        success_calls  += 1
-        Variable.set("success_calls", str(success_calls))
-        # Define las columnas del DataFrame según el esquema proporcionado
-        columns = [
-            "Elevation",
-            "Aspect",
-            "Slope",
-            "Horizontal_Distance_To_Hydrology",
-            "Vertical_Distance_To_Hydrology",
-            "Horizontal_Distance_To_Roadways",
-            "Hillshade_9am",
-            "Hillshade_Noon",
-            "Hillshade_3pm",
-            "Horizontal_Distance_To_Fire_Points",
-            "Wilderness_Area",
-            "Soil_Type",
-            "Cover_Type"
-        ]
+    data, batch_number = get_data_from_api(API_URL, GROUP_NUMBER)
+    
+    columns = ['brokered_by',
+            'status',
+            'price',
+            'bed',
+            'bath',
+            'acre_lot',
+            'street',
+            'city',
+            'state',
+            'zip_code',
+            'house_size',
+            'prev_sold_date']
         # Crea un DataFrame con los datos
         df = pd.DataFrame(data, columns=columns)
-
+    
                 
-        # Almacena los datos en la base de datos
-        engine = create_engine(DATABASE_URI)
-        df.to_sql('dataset_covertype_table', con=engine, if_exists='append', index=False)
-        
-        return success_calls >= max_calls
+    # Almacena los datos en la base de datos
+    engine = create_engine(DATABASE_URI)
+    df.to_sql('dataset_covertype_table', con=engine, if_exists='append', index=False)
+    
+    return success_calls >= max_calls
 
     else:
         if response.status_code == 400: 
