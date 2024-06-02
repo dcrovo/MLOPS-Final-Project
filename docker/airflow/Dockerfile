@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
 USER airflow
 
 # Actualiza pip e instala las dependencias de Python
-RUN pip install --upgrade pip &&
+RUN pip install --upgrade pip
 RUN pip install mlflow==2.10.2 \
     pandas \
     sqlalchemy \
