@@ -1,24 +1,24 @@
 FROM apache/airflow:2.6.0-python3.8
 
-# Cambia al usuario root para instalar herramientas del sistema
+# Switch to root user to install system tools
 USER root
 
-# Instala las herramientas de desarrollo necesarias
+# Install the necessary development tools
 RUN apt-get update && apt-get install -y \
     build-essential \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Cambia de nuevo al usuario airflow
+# Switch back to the airflow user
 USER airflow
 
-# Actualiza pip e instala las dependencias de Python
-RUN pip install --upgrade pip
-RUN pip install mlflow==2.10.2 \
+# Upgrade pip and install Python dependencies
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir mlflow==2.10.2 \
     pandas \
     sqlalchemy \
     pymysql \
-    scikit-learn \ 
+    scikit-learn \
     matplotlib \
     evidently \
     pycaret \
@@ -27,5 +27,3 @@ RUN pip install mlflow==2.10.2 \
     urllib3==1.26.6 \
     botocore==1.21.0 \
     boto3
-
-    
