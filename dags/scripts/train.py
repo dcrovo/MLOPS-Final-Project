@@ -97,12 +97,12 @@ def train_models(sample_size=100):
 
     param_grid_rf = { 
         "random_forest__max_depth": [5, 10],
-        "random_forest__n_estimators": [10, 50]
+        "random_forest__n_estimators": [50, 100]
     }
 
     mlflow.sklearn.autolog(log_model_signatures=True, log_input_examples=True)
 
-    search = GridSearchCV(pipeline_rf, param_grid_rf, n_jobs=2)
+    search = GridSearchCV(pipeline_rf, param_grid_rf, n_jobs=4)
     with mlflow.start_run(run_name="random_forest_run") as run:
         logger.info("Starting Random Forest training")
         search.fit(X_train, y_train)

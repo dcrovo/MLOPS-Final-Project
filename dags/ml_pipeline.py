@@ -46,7 +46,7 @@ def create_table_if_not_exists():
     description='Fetch data from API and store in RAW DB',
     catchup=False,
     tags=['ml_pipeline'],
-    schedule_interval='*/10 * * * *'  # This sets the DAG to run every 10 minutes
+    schedule_interval='*/20 * * * *'  # This sets the DAG to run every 10 minutes
 )
 def ml_pipeline():
     
