@@ -9,3 +9,4 @@ RUN pip install scipy==1.11.4
 RUN pip install boto3==1.26.121
 RUN pip install requests==2.28.2
 RUN pip install joblib==1.3.0
+RUN pip install shap==0.45.1

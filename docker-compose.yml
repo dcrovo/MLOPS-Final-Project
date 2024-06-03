@@ -1,7 +1,7 @@
 version: '3.8'
 x-airflow-common:
   &airflow-common
-  image: ${DOCKERHUB_USERNAME}/airflow:1.0.0
+  image: ${DOCKERHUB_USERNAME}/airflow:1.2.0
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -326,7 +326,7 @@ services:
     
   mlflow:
     container_name: Mlflow_server
-    image: ${DOCKERHUB_USERNAME}/mlflow:1.0.0
+    image: ${DOCKERHUB_USERNAME}/mlflow:1.1.0
     ports:
       - "${MLFLOW_PORT}:5000"
     environment:
@@ -343,24 +343,38 @@ services:
       
   inference:
     container_name: Inference
-    image: ${DOCKERHUB_USERNAME}/inference:1.0.0
+    # build: ./docker/inference
+    image: ${DOCKERHUB_USERNAME}/inference:1.2.0
     ports:
       - "${INFERENCE_PORT}:80"
+    volumes:
+      - ./src/backend:/opt/code/
     depends_on:
       - mlflow
+      - rawdb
+      - cleandb
+    restart: always
     networks:
       - backend
+    command: "uvicorn opt.code.main:app --host 0.0.0.0 --port 80 --reload"
+
 
   streamlit: 
+
     container_name: Streamlit_app
-    image: ${DOCKERHUB_USERNAME}/streamlit:1.0.0
+    image: ${DOCKERHUB_USERNAME}/streamlit:1.2.0
     ports:
       - "${STREAMLIT_PORT}:8501"
+    volumes:
+      - ./src/frontend:/opt/code/
     depends_on:
       - mlflow
+      - inference
     restart: always
     networks:
       - frontend
+    command: "streamlit run /opt/code/main.py --server.port=8501 --server.address=0.0.0.0 "
+
 
 volumes:
   minio-data:
