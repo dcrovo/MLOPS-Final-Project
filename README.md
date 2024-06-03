@@ -88,22 +88,32 @@ Los siguientes pasos permiten realizar la configuración del ambiente luego de s
 A través de la api se pueden realizar 3 tipos de peticiones: 
 - **/predict/:** para realizar las predicciones
 - **/unique_values/:** Para crear una lista de valores únicos que serán mostrados en la interfaz gráfica (drop-down menu)
-- **/shap/:** para el cálculo de los shap para interpetración de modelos
-Toto esto es realizado por modelo almacenado y etiquetado @produccion.
+- **/shap/:** para el cálculo de los shap para interpetración de modelos.
+  
+Se utiliza modelo almacenado y etiquetado stage @production.
 
-http://10.43.101.155:8084 </br>
+http://10.43.101.155:8084 
+</br>
 ![image](https://github.com/dcrovo/MLOPS-Final-Project/assets/26165926/306bf97c-3e1e-4c39-a9d1-4cfbcc83472e)
 
 
 ## UI
-La interfaz de usuario es accesible desde la dirección: http://10.43.101.155:8087 </br>
+La interfaz de usuario es accesible desde la dirección: http://10.43.101.155:8087 
+En esta tambien se puede observar el resultado de los valores SHAP del último modelo 
+</br>
 ![image](https://github.com/dcrovo/MLOPS-Final-Project/assets/26165926/602a861e-5e10-437c-83e7-bf6be2dae166)
+
+## Resultados de desición de entrenamiento
+
+La función `check_data_drift` se utiliza para detectar el data drift entre el último lote de datos y los lotes anteriores. La deriva de datos ocurre cuando las propiedades estadísticas de los datos cambian con el tiempo, lo que puede afectar el rendimiento de los modelos de machine learning. La función carga el último lote y todos los datos históricos, eliminando duplicados y valores nulos. Luego, toma muestras aleatorias de los datos si el tamaño excede un límite predefinido. Se realizan pruebas estadísticas, como Kolmogorov-Smirnov para datos numéricos y Chi-cuadrado para datos categóricos, para identificar diferencias significativas entre los datos actuales y los de referencia. Si se detecta deriva (p-valor por debajo de un umbral especificado), se genera un reporte y una visualización gráfica que detalla las columnas afectadas.
+
+un ejemplo del esscenario en el cual se decidió entrenar es el siguiente
+![image](https://github.com/dcrovo/MLOPS-Final-Project/assets/26165926/62cfea16-4b31-4d2b-ae36-7e05603f5a9e)
 
 
 
 ## Video
+[![Watch the video](https://img.youtube.com/vi/Y-5fUG5H-Zw/hqdefault.jpg)](https://youtu.be/Y-5fUG5H-Zw)
 
-
-[![IMAGE ALT TEXT HERE]([https://img.youtube.com/vi/4flOEZq96F0/0.jpg)](https://www.youtube.com/watch?v=4flOEZq96F0](https://youtu.be/Y-5fUG5H-Zw))
 
 
