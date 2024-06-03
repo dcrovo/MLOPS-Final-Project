@@ -20,26 +20,26 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
       - name: Build Airflow Docker image
-        run: docker build ./docker/airflow -t ${{ secrets.DOCKERHUB_USERNAME }}/airflow:1.1.0
+        run: docker build ./docker/airflow -t ${{ secrets.DOCKERHUB_USERNAME }}/airflow:1.2.0
 
       - name: Push Airflow Docker image to DockerHub
-        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/airflow:1.0.0
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/airflow:1.2.0
 
       - name: Build Mlflow Docker image
-        run: docker build ./docker/mlflow -t ${{ secrets.DOCKERHUB_USERNAME }}/mlflow:1.0.0
+        run: docker build ./docker/mlflow -t ${{ secrets.DOCKERHUB_USERNAME }}/mlflow:1.1.0
 
       - name: Push Mlflow Docker image to DockerHub
-        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/mlflow:1.0.0
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/mlflow:1.1.0
 
       - name: Build Inference Docker image
-        run: docker build ./docker/inference -t ${{ secrets.DOCKERHUB_USERNAME }}/inference:1.0.0
+        run: docker build ./docker/inference -t ${{ secrets.DOCKERHUB_USERNAME }}/inference:1.2.0
 
       - name: Push Inference Docker image to DockerHub
-        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/inference:1.0.0
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/inference:1.2.0
 
       - name: Build Streamlit Docker image
-        run: docker build ./docker/streamlit -t ${{ secrets.DOCKERHUB_USERNAME }}/streamlit:1.0.0
+        run: docker build ./docker/streamlit -t ${{ secrets.DOCKERHUB_USERNAME }}/streamlit:1.2.0
 
       - name: Push Streamlit Docker image to DockerHub
-        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/streamlit:1.0.0
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/streamlit:1.2.0
 

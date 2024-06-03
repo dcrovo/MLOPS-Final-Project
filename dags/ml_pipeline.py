@@ -1,22 +1,42 @@
 from airflow import DAG
-from airflow.decorators import task, dag
-from datetime import datetime, timedelta
-from evidently.report import Report
-from evidently.metric_preset import DataDriftPreset
-from sqlalchemy import create_engine
+from airflow.decorators import dag, task
+from datetime import datetime
+from sqlalchemy import create_engine, text
 import pandas as pd
-import tensorflow_data_validation as tfdv
 import os
-import boto3
+from sklearn.model_selection import train_test_split
+from airflow.operators.python import BranchPythonOperator
+import matplotlib.pyplot as plt
+from scipy.stats import ks_2samp, chi2_contingency
+import numpy as np
 
 API_URL = "http://10.43.101.149:80"
 GROUP_NUMBER = 6
-RAW_DATABASE_URI = f'postgresql+psycopg2://rawusr:rapass@rawdb:5432/rawdb'
-CLEAN_DATABASE_URI = f'postgresql+psycopg2://cleanusr:cleanpass@cleandb:5432/cleandb'
-MINIO_URL = "http://minio:9000"
-MINIO_BUCKET = "ml-artifacts"
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
+RAW_DATABASE_URI = 'postgresql+psycopg2://rawusr:rawpass@rawdb:5432/rawdb'
+CLEAN_DATABASE_URI = 'postgresql+psycopg2://cleanusr:cleanpass@cleandb:5432/cleandb'
+REPORTS_DIR = '/opt/airflow/logs/reports'
+
+def create_table_if_not_exists():
+    engine = create_engine(RAW_DATABASE_URI)
+    create_table_query = """
+    CREATE TABLE IF NOT EXISTS raw_data (
+        brokered_by VARCHAR(255),
+        status VARCHAR(255),
+        price NUMERIC,
+        bed INTEGER,
+        bath INTEGER,
+        acre_lot NUMERIC,
+        street VARCHAR(255),
+        city VARCHAR(255),
+        state VARCHAR(255),
+        zip_code VARCHAR(20),
+        house_size NUMERIC,
+        prev_sold_date DATE,
+        batch_number INTEGER
+    );
+    """
+    with engine.connect() as connection:
+        connection.execute(text(create_table_query))
 
 @dag(
     default_args={
@@ -26,15 +46,14 @@ MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
     description='Fetch data from API and store in RAW DB',
     catchup=False,
     tags=['ml_pipeline'],
+    schedule_interval='*/20 * * * *'  # This sets the DAG to run every 10 minutes
 )
 def ml_pipeline():
     
     @task
     def fetch_and_store_data():
         from scripts.utils import get_data_from_api
-        from sqlalchemy import create_engine, text
-        import pandas as pd
-        
+        create_table_if_not_exists()  # Ensure table exists
         data, batch_number = get_data_from_api(API_URL, GROUP_NUMBER)
         
         columns = [
@@ -58,12 +77,13 @@ def ml_pipeline():
                 return {"new_data": 1, "batch_number": batch_number}
     
     @task
-    def process_data(new_data, batch_number):
-        from sqlalchemy import create_engine
-        import pandas as pd
+    def process_data(fetch_result):
+        new_data = fetch_result['new_data']
+        batch_number = fetch_result['batch_number']
         
         if new_data == 0:
-            return
+            print("No new data added to db")
+            return batch_number
         
         engine = create_engine(RAW_DATABASE_URI)
         df = pd.read_sql('raw_data', engine)
@@ -81,79 +101,122 @@ def ml_pipeline():
         return batch_number
 
     @task
-    def check_data_drift(last_batch_number):
-        from evidently import ColumnMapping
-        from evidently.report import Report
-        from evidently.metric_preset import DataDriftPreset
-        from sqlalchemy import create_engine
-        import pandas as pd
-        import boto3
-
+    def check_data_drift(last_batch_number, threshold=0.1, sample_size=1000):
         engine = create_engine(RAW_DATABASE_URI)
         df_new = pd.read_sql(f"SELECT * FROM raw_data WHERE batch_number = {last_batch_number}", engine)
-        
         df_all = pd.read_sql("SELECT * FROM raw_data", engine)
         df_all.drop_duplicates(inplace=True)
         df_all.dropna(inplace=True)
         
-        ref_data = df_all[df_all['batch_number'] < last_batch_number]
-        curr_data = df_new
-        
-        report = Report(metrics=[DataDriftPreset()])
-        report.run(reference_data=ref_data, current_data=curr_data)
-        
-        report_file = f'/tmp/data_drift_report_{last_batch_number}.html'
-        report.save_html(report_file)
+        if df_all['batch_number'].nunique() == 1:
+            return False
+        else:
+            ref_data = df_all[df_all['batch_number'] < last_batch_number]
+            curr_data = df_new
+            
+            if len(ref_data) > sample_size:
+                ref_data = ref_data.sample(sample_size, random_state=42)
+            if len(curr_data) > sample_size:
+                curr_data = curr_data.sample(sample_size, random_state=42)
+            
+            drift_detected = False
+            test_skipped = False
+            report_data = []
 
-        s3 = boto3.client('s3', endpoint_url=MINIO_URL, aws_access_key_id=MINIO_ACCESS_KEY, aws_secret_access_key=MINIO_SECRET_KEY)
-        s3.upload_file(report_file, MINIO_BUCKET, f'data_drift_report_{last_batch_number}.html')
+            for column in ref_data.columns:
+                if column == 'batch_number':
+                    continue
+                if np.issubdtype(ref_data[column].dtype, np.number):
+                    if ref_data[column].empty or curr_data[column].empty:
+                        print(f"Skipping ks_2samp test for column {column} due to empty data.")
+                        test_skipped = True
+                        break
+                    stat, p_value = ks_2samp(ref_data[column], curr_data[column])
+                else:
+                    contingency_table = pd.crosstab(ref_data[column], curr_data[column])
+                    if contingency_table.size == 0:
+                        print(f"Skipping chi2 test for column {column} due to empty contingency table.")
+                        test_skipped = True
+                        break
+                    stat, p_value, _, _ = chi2_contingency(contingency_table)
+                
+                report_data.append({
+                    'column': column,
+                    'statistic': stat,
+                    'p_value': p_value,
+                    'drift_detected': p_value < threshold
+                })
 
-        drift_detected = report.as_dict()['metrics'][0]['result']['drift_share'] > 0.1
-        
+                if p_value < threshold:
+                    drift_detected = True
+            
+            if test_skipped:
+                return False
+
+            if drift_detected:
+                if not os.path.exists(REPORTS_DIR):
+                    os.makedirs(REPORTS_DIR)
+                report_file = os.path.join(REPORTS_DIR, f'data_drift_report_{last_batch_number}.txt')
+                with open(report_file, 'w') as f:
+                    for entry in report_data:
+                        f.write(f"Column: {entry['column']}, Statistic: {entry['statistic']}, p-value: {entry['p_value']}, Drift Detected: {entry['drift_detected']}\n")
+
+                fig, ax1 = plt.subplots(figsize=(10, 6))
+
+                columns = [entry['column'] for entry in report_data]
+                statistics = [entry['statistic'] for entry in report_data]
+                p_values = [entry['p_value'] for entry in report_data]
+                drift_detected = [entry['drift_detected'] for entry in report_data]
+
+                bar_colors = ['red' if detected else 'green' for detected in drift_detected]
+                
+                ax1.bar(columns, statistics, color=bar_colors)
+                ax1.set_xlabel('Columns')
+                ax1.set_ylabel('Statistic Value')
+                ax1.set_title('Data Drift Detection')
+                plt.xticks(rotation=90)
+                
+                for i, p_value in enumerate(p_values):
+                    ax1.text(i, statistics[i], f'{p_value:.3f}', ha='center', va='bottom')
+
+                plt.tight_layout()
+                plt.savefig(os.path.join(REPORTS_DIR, f'data_drift_visual_{last_batch_number}.png'))
+
         return drift_detected
 
     @task
-    def check_tfdv_statistics(last_batch_number):
-        from sqlalchemy import create_engine
-        import tensorflow_data_validation as tfdv
-        import pandas as pd
-        import os
-        import json
-        import boto3
-
-        engine = create_engine(RAW_DATABASE_URI)
-        df = pd.read_sql(f"SELECT * FROM raw_data WHERE batch_number = {last_batch_number}", engine)
-        
-        stats = tfdv.generate_statistics_from_dataframe(df)
-        anomalies = tfdv.validate_statistics(stats, previous_stats)
-
-        report_file = f'/tmp/tfdv_anomalies_{last_batch_number}.json'
-        with open(report_file, 'w') as f:
-            json.dump(tfdv.utils.display_util.anomalies_to_json(anomalies), f)
-
-        s3 = boto3.client('s3', endpoint_url=MINIO_URL, aws_access_key_id=MINIO_ACCESS_KEY, aws_secret_access_key=MINIO_SECRET_KEY)
-        s3.upload_file(report_file, MINIO_BUCKET, f'tfdv_anomalies_{last_batch_number}.json')
-
-        anomalies_detected = len(anomalies.anomaly_info) > 0
-        
-        return anomalies_detected
-
-    @task
-    def train_decision(drift_detected, anomalies_detected):
-        return drift_detected or anomalies_detected
+    def train_decision(drift_detected):
+        return 'train_model' if drift_detected else 'skip_training'
 
     @task
     def train_model():
-        from scripts.train import train_model
-        train_model()
-    
+        from scripts.train import train_models
+        train_models()
+
+    @task
+    def skip_training():
+        print("Model training skipped.")
+
     fetch_and_store_data_task = fetch_and_store_data()
-    process_data_task = process_data(fetch_and_store_data_task["new_data"], fetch_and_store_data_task["batch_number"])
+    process_data_task = process_data(fetch_and_store_data_task)
     check_data_drift_task = check_data_drift(process_data_task)
-    check_tfdv_statistics_task = check_tfdv_statistics(process_data_task)
-    train_decision_task = train_decision(check_data_drift_task, check_tfdv_statistics_task)
+    train_decision_task = train_decision(check_data_drift_task)
+
     train_model_task = train_model()
-    
-    fetch_and_store_data_task >> process_data_task >> [check_data_drift_task, check_tfdv_statistics_task] >> train_decision_task >> train_model_task
+    skip_training_task = skip_training()
+
+    def decide_branch(**kwargs):
+        ti = kwargs['ti']
+        return ti.xcom_pull(task_ids='train_decision')
+
+    branch_op = BranchPythonOperator(
+        task_id='branching',
+        python_callable=decide_branch,
+        provide_context=True
+    )
+
+    fetch_and_store_data_task >> process_data_task >> check_data_drift_task >> train_decision_task >> branch_op
+    branch_op >> train_model_task
+    branch_op >> skip_training_task
 
 ml_pipeline_dag = ml_pipeline()

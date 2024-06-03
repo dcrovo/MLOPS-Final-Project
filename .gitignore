@@ -161,3 +161,5 @@ cython_debug/
 
 logs/
 minio-data/
+src/backend/img
+src/frontend/img
