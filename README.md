@@ -85,11 +85,20 @@ Los siguientes pasos permiten realizar la configuración del ambiente luego de s
 
 ## Predicción
 
-A través de la interfaz de Streamlit, es posible hacer predicciones usando el modelo almacenado y etiquetado @produccion.
+A través de la api se pueden realizar 3 tipos de peticiones: 
+- **/predict/:** para realizar las predicciones
+- **/unique_values/:** Para crear una lista de valores únicos que serán mostrados en la interfaz gráfica (drop-down menu)
+- **/shap/:** para el cálculo de los shap para interpetración de modelos
+Toto esto es realizado por modelo almacenado y etiquetado @produccion.
 
-http://10.43.101.155:8089 </br>
+http://10.43.101.155:8084 </br>
+![image](https://github.com/dcrovo/MLOPS-Final-Project/assets/26165926/306bf97c-3e1e-4c39-a9d1-4cfbcc83472e)
 
-![alt text](https://github.com/dcrovo/MLOPS-Final-Project/blob/main/img/inference.png?raw=true)
+
+## UI
+La interfaz de usuario es accesible desde la dirección: http://10.43.101.155:8087 </br>
+![image](https://github.com/dcrovo/MLOPS-Final-Project/assets/26165926/602a861e-5e10-437c-83e7-bf6be2dae166)
+
 
 
 ## Video
